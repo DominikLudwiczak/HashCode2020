@@ -3,9 +3,6 @@ class Book:
         self.id = book_id
         self.value = value
 
-    def get_book(self):
-        return self
-
 
 class Library:
     def __init__(self, lib_id, signup_time, books_per_day):
@@ -17,18 +14,19 @@ class Library:
     def add_book(self, book: Book):
         self.book_list.add(book)
 
-    def get_lib(self):
-        return self
-
 
 class Solution:
     def __init__(self, list_of_libs, problem):
         self.list_of_libs = list_of_libs
         self.problem = problem
-        self.fitness = 0
+        self.fitness = self.compute_fitness()
 
     def compute_fitness(self):
-        scanned_books = set()
+        fitness = 0
+        for lib in self.list_of_libs:
+            for b in lib.book_list:
+                fitness += b.value
+        return fitness
 
     def mutate(self):
         ...
@@ -58,20 +56,18 @@ class Problem:
         self.libs.append(lib)
 
     def compute(self):
-        ...
+        sol = Solution(self.libs, self)
 
     def view_problem(self):
         print("number of libraries:", self.libs_num)
         print("deadline:", self.deadline)
-        for l in range(len(self.libs)):
-            lib = self.libs[l].get_lib()
-            print("\tLibrary no.", l+1)
-            print("\t\tOpening time:", lib.signup_time)
-            print("\t\tBooks per day:", lib.books_per_day)
+        for l in self.libs:
+            print("\tLibrary no.", l.id)
+            print("\t\tOpening time:", l.signup_time)
+            print("\t\tBooks per day:", l.books_per_day)
             print("\t\tBook list:")
-            for b in lib.book_list:
-                book = b.get_book()
-                print("\t\t\tBook id:",book.id, "Book value:", book.value)
+            for b in l.book_list:
+                print("\t\t\tBook id:",b.id, "Book value:", b.value)
             print()
 
 library = open("libraries/a_example.txt", "r")
@@ -90,5 +86,5 @@ for i in range(l):
     problem.add_lib(new_lib)
 library.close()
 
-problem.view_problem()
-# problem.compute()
+# problem.view_problem()
+problem.compute()
