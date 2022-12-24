@@ -46,8 +46,7 @@ class Solution:
                 fitness += b.value
         return fitness
 
-    def mutate(self):
-        ...
+    
 
 
 class Population:
@@ -102,9 +101,45 @@ class Problem:
             for b in l.book_list:
                 print("\t\t\tBook id:",b.id, "Book value:", b.value)
             print()
+    
+        #dobra uznałem że bez komentarzy to jednak nie da rady
+        #przenoszę oba do Problem bo potrzebuję dostępu do orginalnych bibliotek żeby wiedzieć jakie książki mogę zeskanować
+        #możesz wyjebać te linijki komentarza jak je przeczytasz
+    def mutate(self, solution: Solution):
+        #tu poniżej zmieniam kolejność 2 losowych w solution
+        idx1, idx2 = random.sample(range(len(solution.list_of_libs)), 2)
+        solution.list_of_libs[idx1], solution.list_of_libs[idx2] = solution.list_of_libs[idx2], solution.list_of_libs[idx1]
+
+        #tutaj dużo kopiowania kodu robiłem z compute pewnie powinienem to jakoś rozbić na metody ale to razem przegadamy jak co
+        days_left = self.deadline
+        scanned_books = set()
+        #nie zdebugowałem tego ale powinno updateować wszystkie biblioteki z solution.list_of_libs
+        for idx in range(min(idx1, idx2)):
+            l = self.libs[idx]
+            if days_left <= 0:
+                break
+            scanned_books.update(l.give_scanned_books(days_left, scanned_books))
+            days_left -= l.signup_time
+        
+        for idx in range(min(idx1,idx2), len(solution.list_of_libs)):
+            if days_left <= 0:
+                break
+            l = self.libs[solution.list_of_libs[idx].id]
+            sol_lib = deepcopy(l)
+            sol_lib.book_list = l.give_scanned_books(days_left, scanned_books)
+            scanned_books.update(sol_lib.book_list)
+            days_left -= l.signup_time
+            solution[idx] = sol_lib
+        
+        return solution
+            
+            
+            
 
 
-library = open("libraries/d_tough_choices.txt", "r")
+
+
+library = open("libraries/f_libraries_of_the_world.txt", "r")
 
 b, l, d = [int(x) for x in library.readline().split()]
 values = [int(x) for x in library.readline().split()]
