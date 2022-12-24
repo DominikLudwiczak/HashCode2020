@@ -58,8 +58,6 @@ class Population:
         assert len(self.solutions) < self.pop_size
         self.solutions.add(solution)
 
-    def crossover(self):
-        ...
 
 
 class Problem:
@@ -115,9 +113,9 @@ class Problem:
         scanned_books = set()
         #nie zdebugowałem tego ale powinno updateować wszystkie biblioteki z solution.list_of_libs
         for idx in range(min(idx1, idx2)):
-            l = self.libs[idx]
             if days_left <= 0:
                 break
+            l = self.libs[solution.list_of_libs[idx].id]
             scanned_books.update(l.give_scanned_books(days_left, scanned_books))
             days_left -= l.signup_time
         
@@ -132,7 +130,47 @@ class Problem:
             solution[idx] = sol_lib
         
         return solution
-            
+
+    def crossover(self, sol1: Solution, sol2:Solution):
+        libs = []
+        taken = set()
+        length = len(sol1.list_of_libs) + len(sol2.list_of_libs)
+        days_left = self.deadline
+        scanned_books = set()
+        for idx in range(length//2):
+            if days_left <= 0:
+                break
+            l = self.libs[sol1.list_of_libs[idx].id]
+            sol_lib = deepcopy(l)
+            taken.add(l.id)
+            sol_lib.book_list = l.give_scanned_books(days_left, scanned_books)
+            scanned_books.update(sol_lib.book_list)
+            days_left -= l.signup_time
+            libs.append(sol_lib)
+
+        for idx in range(length//2, length):
+            if days_left <= 0:
+                break
+            #tutaj trochę myślałem jakby to zrobić żeby nie brało za dużo czasu na szukanie innego indexu jak ten który weźmiemy jest już dodany
+            #i jako rozwiązanie to jebłem żeby se iterował od połowy sol1 (bo wszystkie do połowy są na pewno dodane) tylko kurwa wydaje mi się że to
+            #dość często może nadpisać jakiś który jest potem w sol2 i dostaniemy sol1 mało zmienione
+            l = self.libs[sol1.list_of_libs[idx].id]
+            if l in taken:
+                for help_idx in range(length//2, length):
+                    l = self.libs[sol1.list_of_libs[help_idx].id]
+                    if l.id not in taken:
+                        break
+            sol_lib = deepcopy(l)
+            sol_lib.book_list = l.give_scanned_books(days_left, scanned_books)
+            scanned_books.update(sol_lib.book_list)
+            days_left -= l.signup_time
+            libs.append(sol_lib)
+
+            #tu przy usuwaniu nie wiem co powinienem usuwać, ale uznałem że działa to tak że biorę dwa rozwiązania i robię ich połączenie w jedno,
+            #więc powinienem usunąć 1 i drugie zostawić, ale to już nwm
+            sol = Solution(libs)
+            del sol1
+            return sol
             
             
 
