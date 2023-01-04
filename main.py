@@ -46,18 +46,19 @@ class Solution:
                 fitness += b.value
         return fitness
 
-    
+    def delete(self):
+        for x in self.list_of_libs:
+            del x
 
 
-class Population:
-    def __init__(self, pop_size):
-        self.pop_size = pop_size
-        self.solutions = set()
-
-    def add_solution(self, solution: Solution):
-        assert len(self.solutions) < self.pop_size
-        self.solutions.add(solution)
-
+# class Population:
+#     def __init__(self, pop_size):
+#         self.pop_size = pop_size
+#         self.solutions = set()
+#
+#     def add_solution(self, solution: Solution):
+#         assert len(self.solutions) < self.pop_size
+#         self.solutions.add(solution)
 
 
 class Problem:
@@ -66,95 +67,84 @@ class Problem:
         self.deadline = deadline
         self.libs_num = libs_num
         self.pop_size = pop_size
+        self.p_mutate = 0.6
+        self.p_cross = 0.4
+        self.t_size = 2
 
     def add_lib(self, lib):
         assert len(self.libs) < self.libs_num
         self.libs.append(lib)
 
-    def compute(self):
-        pop = Population(self.pop_size)
-        for i in range(self.pop_size):
+    def random_pop(self):
+        # pop = Population(self.pop_size)
+        pop = []
+        for _ in range(self.pop_size):
             days_left = self.deadline
             libs = []
             scanned_books = set()
             for l in sorted(self.libs, key=lambda x: random.random()):
+                days_left -= l.signup_time
                 if days_left <= 0:
                     break
                 sol_lib = deepcopy(l)
                 sol_lib.book_list = l.give_scanned_books(days_left, scanned_books)
                 scanned_books.update(sol_lib.book_list)
-                days_left -= l.signup_time
                 libs.append(sol_lib)
-            pop.add_solution(Solution(libs))
+            # pop.add_solution(Solution(libs))
+            pop.append(Solution(libs))
         return pop
 
-    def view_problem(self):
-        print("number of libraries:", self.libs_num)
-        print("deadline:", self.deadline)
-        for l in self.libs:
-            print("\tLibrary no.", l.id)
-            print("\t\tOpening time:", l.signup_time)
-            print("\t\tBooks per day:", l.books_per_day)
-            print("\t\tBook list:")
-            for b in l.book_list:
-                print("\t\t\tBook id:",b.id, "Book value:", b.value)
-            print()
-    
-        #dobra uznałem że bez komentarzy to jednak nie da rady
-        #przenoszę oba do Problem bo potrzebuję dostępu do orginalnych bibliotek żeby wiedzieć jakie książki mogę zeskanować
-        #możesz wyjebać te linijki komentarza jak je przeczytasz
     def mutate(self, solution: Solution):
-        #tu poniżej zmieniam kolejność 2 losowych w solution
         idx1, idx2 = random.sample(range(len(solution.list_of_libs)), 2)
         solution.list_of_libs[idx1], solution.list_of_libs[idx2] = solution.list_of_libs[idx2], solution.list_of_libs[idx1]
+        libs =[]
 
-        #tutaj dużo kopiowania kodu robiłem z compute pewnie powinienem to jakoś rozbić na metody ale to razem przegadamy jak co
         days_left = self.deadline
         scanned_books = set()
-        #nie zdebugowałem tego ale powinno updateować wszystkie biblioteki z solution.list_of_libs
         for idx in range(min(idx1, idx2)):
-            if days_left <= 0:
-                break
-            l = self.libs[solution.list_of_libs[idx].id]
-            scanned_books.update(l.give_scanned_books(days_left, scanned_books))
-            days_left -= l.signup_time
-        
-        for idx in range(min(idx1,idx2), len(solution.list_of_libs)):
-            if days_left <= 0:
-                break
             l = self.libs[solution.list_of_libs[idx].id]
             sol_lib = deepcopy(l)
             sol_lib.book_list = l.give_scanned_books(days_left, scanned_books)
-            scanned_books.update(sol_lib.book_list)
             days_left -= l.signup_time
-            solution[idx] = sol_lib
+            if days_left <= 0:
+                break
+            scanned_books.update(sol_lib.book_list)
+            libs.append(sol_lib)
         
-        return solution
+        for idx in range(min(idx1, idx2), len(solution.list_of_libs)):
+            l = self.libs[solution.list_of_libs[idx].id]
+            days_left -= l.signup_time
+            if days_left <= 0:
+                break
+            sol_lib = deepcopy(l)
+            sol_lib.book_list = l.give_scanned_books(days_left, scanned_books)
+            scanned_books.update(sol_lib.book_list)
+            libs.append(sol_lib)
+        xd = Solution(libs)
+        return xd
 
-    def crossover(self, sol1: Solution, sol2:Solution):
+    def crossover(self, sol1: Solution, sol2: Solution):
         libs = []
         taken = set()
-        length = len(sol1.list_of_libs) + len(sol2.list_of_libs)
+        length = len(sol1.list_of_libs)
         days_left = self.deadline
         scanned_books = set()
         for idx in range(length//2):
+            l = self.libs[sol1.list_of_libs[idx].id]
+            days_left -= l.signup_time
             if days_left <= 0:
                 break
-            l = self.libs[sol1.list_of_libs[idx].id]
             sol_lib = deepcopy(l)
             taken.add(l.id)
             sol_lib.book_list = l.give_scanned_books(days_left, scanned_books)
             scanned_books.update(sol_lib.book_list)
-            days_left -= l.signup_time
             libs.append(sol_lib)
 
         for idx in range(length//2, length):
+            l = self.libs[sol1.list_of_libs[idx].id]
+            days_left -= l.signup_time
             if days_left <= 0:
                 break
-            #tutaj trochę myślałem jakby to zrobić żeby nie brało za dużo czasu na szukanie innego indexu jak ten który weźmiemy jest już dodany
-            #i jako rozwiązanie to jebłem żeby se iterował od połowy sol1 (bo wszystkie do połowy są na pewno dodane) tylko kurwa wydaje mi się że to
-            #dość często może nadpisać jakiś który jest potem w sol2 i dostaniemy sol1 mało zmienione
-            l = self.libs[sol1.list_of_libs[idx].id]
             if l in taken:
                 for help_idx in range(length//2, length):
                     l = self.libs[sol1.list_of_libs[help_idx].id]
@@ -163,18 +153,48 @@ class Problem:
             sol_lib = deepcopy(l)
             sol_lib.book_list = l.give_scanned_books(days_left, scanned_books)
             scanned_books.update(sol_lib.book_list)
-            days_left -= l.signup_time
             libs.append(sol_lib)
 
-            #tu przy usuwaniu nie wiem co powinienem usuwać, ale uznałem że działa to tak że biorę dwa rozwiązania i robię ich połączenie w jedno,
-            #więc powinienem usunąć 1 i drugie zostawić, ale to już nwm
             sol = Solution(libs)
-            del sol1
+            # sol1.delete()
+            # del sol1
             return sol
-            
-            
 
+    @staticmethod
+    def tournament(sample):
+        sample = sorted(sample, key=lambda solution: solution.fitness)
+        return sample[-1]
 
+    def step(self, population):
+        for i, solution in enumerate(population):
+            if i >= self.pop_size:
+                break
+            if random.random() < self.p_mutate:
+                solution = self.mutate(solution)
+            if random.random() < self.p_cross:
+                solution = self.crossover(solution, population[random.randint(0, self.pop_size-1)])
+            population.append(solution)
+        new_population = []
+        for _ in range(self.pop_size):
+            new_population.append(self.tournament(random.sample(population, self.t_size)))
+
+        return new_population
+
+    def solve(self):
+        population = self.random_pop()
+        no_impro = 0
+        best_score = 0
+        best_solution = None
+        while no_impro < 100:
+            print(best_score)
+            no_impro += 1
+            population = self.step(population)
+            for solution in population:
+                if solution.fitness > best_score:
+                    best_score = solution.fitness
+                    best_solution = solution
+                    no_impro = 0
+        return best_solution
 
 
 library = open("libraries/f_libraries_of_the_world.txt", "r")
@@ -183,7 +203,7 @@ b, l, d = [int(x) for x in library.readline().split()]
 values = [int(x) for x in library.readline().split()]
 assert len(values) == b
 
-problem = Problem(d, l, 10)
+problem = Problem(d, l, 50)
 
 for i in range(l):
     spl = library.readline().split()
@@ -195,4 +215,4 @@ for i in range(l):
 library.close()
 
 # problem.view_problem()
-test=problem.compute()
+test = problem.solve()
