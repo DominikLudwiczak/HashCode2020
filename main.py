@@ -1,5 +1,9 @@
 import random
 from copy import deepcopy
+import copy
+import time
+
+end_time = time.time() + 240  # stop after 240 seconds
 
 
 class Book:
@@ -22,13 +26,12 @@ class Library:
         self.book_list = sorted(self.book_list, key=lambda x: x.value, reverse=True)
 
     def give_scanned_books(self, days_left, already_scanned):
-        days_left -= self.signup_time
         books = []
         scanned = 0
         for b in self.book_list:
-            if scanned == days_left*self.books_per_day:
-                break
-            if b not in already_scanned:
+            if scanned + 1 > days_left*self.books_per_day:
+                return books
+            if b.id not in already_scanned:
                 books.append(b)
                 scanned += 1
         return books
@@ -46,9 +49,9 @@ class Solution:
                 fitness += b.value
         return fitness
 
-    def delete(self):
-        for x in self.list_of_libs:
-            del x
+    # def delete(self):
+    #     for x in self.list_of_libs:
+    #         del x
 
 
 # class Population:
@@ -68,8 +71,8 @@ class Problem:
         self.libs_num = libs_num
         self.pop_size = pop_size
         self.p_mutate = 0.6
-        self.p_cross = 0.4
-        self.t_size = 2
+        self.p_cross = 0.2
+        self.t_size = 15
 
     def add_lib(self, lib):
         assert len(self.libs) < self.libs_num
@@ -84,100 +87,135 @@ class Problem:
             scanned_books = set()
             for l in sorted(self.libs, key=lambda x: random.random()):
                 days_left -= l.signup_time
-                if days_left <= 0:
-                    break
-                sol_lib = deepcopy(l)
-                sol_lib.book_list = l.give_scanned_books(days_left, scanned_books)
-                scanned_books.update(sol_lib.book_list)
-                libs.append(sol_lib)
+                if days_left > 0:
+                    sol_lib = copy.copy(l)
+                    sol_lib.book_list = l.give_scanned_books(days_left, scanned_books)
+                    scanned_books.update([book.id for book in sol_lib.book_list])
+                    libs.append(sol_lib)
+                else:
+                    days_left += l.signup_time
             # pop.add_solution(Solution(libs))
             pop.append(Solution(libs))
         return pop
 
     def mutate(self, solution: Solution):
-        idx1, idx2 = random.sample(range(len(solution.list_of_libs)), 2)
-        solution.list_of_libs[idx1], solution.list_of_libs[idx2] = solution.list_of_libs[idx2], solution.list_of_libs[idx1]
-        libs =[]
+        indices = [lib.id for lib in solution.list_of_libs]
 
+        if len(indices) < len(self.libs)/2:
+            taken = set([id for lib in indices])
+            lib_idx = random.randint(0, len(self.libs)-1)
+            while lib_idx in taken:
+                lib_idx = random.randint(0, len(self.libs)-1)
+            idx1 = random.randint(0, len(indices)-1)
+            indices[idx1] = lib_idx
+        else:
+            idx1, idx2 = random.sample(range(len(indices)), 2)
+            indices[idx1], indices[idx2] = indices[idx2], indices[idx1]
+            # idx1 = min(idx1, idx2)
+
+        libs = []
         days_left = self.deadline
         scanned_books = set()
-        for idx in range(min(idx1, idx2)):
-            l = self.libs[solution.list_of_libs[idx].id]
-            sol_lib = deepcopy(l)
-            sol_lib.book_list = l.give_scanned_books(days_left, scanned_books)
+
+        for lib_idx in range(len(indices)):
+            l = self.libs[indices[lib_idx]]
             days_left -= l.signup_time
             if days_left <= 0:
-                break
-            scanned_books.update(sol_lib.book_list)
-            libs.append(sol_lib)
-        
-        for idx in range(min(idx1, idx2), len(solution.list_of_libs)):
-            l = self.libs[solution.list_of_libs[idx].id]
-            days_left -= l.signup_time
-            if days_left <= 0:
-                break
+                days_left += l.signup_time
+                continue
             sol_lib = deepcopy(l)
             sol_lib.book_list = l.give_scanned_books(days_left, scanned_books)
-            scanned_books.update(sol_lib.book_list)
+            scanned_books.update([book.id for book in sol_lib.book_list])
             libs.append(sol_lib)
-        xd = Solution(libs)
-        return xd
+
+        taken = set([lib for lib in indices])
+        for l in self.libs:
+            if l.id not in taken:
+                if l.signup_time < days_left:
+                    days_left -= l.signup_time
+                    if days_left <= 0:
+                        days_left += l.signup_time
+                        continue
+                    sol_lib = deepcopy(l)
+                    sol_lib.book_list = l.give_scanned_books(days_left, scanned_books)
+                    scanned_books.update([book.id for book in sol_lib.book_list])
+                    libs.append(sol_lib)
+
+        return Solution(libs)
 
     def crossover(self, sol1: Solution, sol2: Solution):
         libs = []
         taken = set()
         length = len(sol1.list_of_libs)
+        indices1 = [lib.id for lib in sol1.list_of_libs]
+        indices2 = [lib.id for lib in sol2.list_of_libs]
         days_left = self.deadline
         scanned_books = set()
+
         for idx in range(length//2):
-            l = self.libs[sol1.list_of_libs[idx].id]
+            l = self.libs[indices1[idx]]
             days_left -= l.signup_time
             if days_left <= 0:
-                break
+                days_left += l.signup_time
+                continue
             sol_lib = deepcopy(l)
             taken.add(l.id)
             sol_lib.book_list = l.give_scanned_books(days_left, scanned_books)
-            scanned_books.update(sol_lib.book_list)
+            scanned_books.update([book.id for book in sol_lib.book_list])
             libs.append(sol_lib)
 
-        for idx in range(length//2, length):
-            l = self.libs[sol1.list_of_libs[idx].id]
+        for idx in range(length//2, len(indices2)):
+            l = self.libs[indices2[idx]]
             days_left -= l.signup_time
             if days_left <= 0:
-                break
+                days_left += l.signup_time
+                continue
             if l in taken:
                 for help_idx in range(length//2, length):
-                    l = self.libs[sol1.list_of_libs[help_idx].id]
+                    l = self.libs[indices1[help_idx]]
                     if l.id not in taken:
                         break
             sol_lib = deepcopy(l)
             sol_lib.book_list = l.give_scanned_books(days_left, scanned_books)
-            scanned_books.update(sol_lib.book_list)
+            scanned_books.update([book.id for book in sol_lib.book_list])
             libs.append(sol_lib)
 
-            sol = Solution(libs)
-            # sol1.delete()
-            # del sol1
-            return sol
+        taken = set([lib.id for lib in libs])
+        for l in self.libs:
+            if l.id not in taken:
+                if l.signup_time < days_left:
+                    days_left -= l.signup_time
+                    if days_left <= 0:
+                        days_left += l.signup_time
+                        continue
+                    sol_lib = deepcopy(l)
+                    sol_lib.book_list = l.give_scanned_books(days_left, scanned_books)
+                    scanned_books.update([book.id for book in sol_lib.book_list])
+                    libs.append(sol_lib)
+        # sol1.delete()
+        # del sol1
+        return Solution(libs)
 
     @staticmethod
     def tournament(sample):
         sample = sorted(sample, key=lambda solution: solution.fitness)
-        return sample[-1]
+        winner = sample[-1]
+        return winner
 
     def step(self, population):
-        for i, solution in enumerate(population):
-            if i >= self.pop_size:
-                break
-            if random.random() < self.p_mutate:
-                solution = self.mutate(solution)
-            if random.random() < self.p_cross:
-                solution = self.crossover(solution, population[random.randint(0, self.pop_size-1)])
-            population.append(solution)
         new_population = []
         for _ in range(self.pop_size):
-            new_population.append(self.tournament(random.sample(population, self.t_size)))
+            new_sol = self.tournament(random.sample(population, self.t_size))
 
+            if random.random() < self.p_mutate:
+                new_sol = self.mutate(new_sol)
+
+            if random.random() < self.p_cross:
+                new_sol = self.crossover(new_sol, population[0])
+
+            new_population.append(new_sol)
+        print(len(set(new_population)))
+        # return [self.mutate(solution) for solution in population]
         return new_population
 
     def solve(self):
@@ -185,7 +223,7 @@ class Problem:
         no_impro = 0
         best_score = 0
         best_solution = None
-        while no_impro < 100:
+        while time.time() < end_time:
             print(best_score)
             no_impro += 1
             population = self.step(population)
@@ -194,16 +232,41 @@ class Problem:
                     best_score = solution.fitness
                     best_solution = solution
                     no_impro = 0
+
+        for x in best_solution.list_of_libs:
+            taken = set()
+            for book in x.book_list:
+                if book.id in taken:
+                    print(':(')
+                else:
+                    taken.add(book.id)
+
+        print("best fitness = ", best_solution.fitness)
+        books = set()
+        with open("testxd.txt", "w") as file:
+            file.write(str(len(best_solution.list_of_libs)) + '\n')
+            for x in best_solution.list_of_libs:
+                file.write(str(x.id) + ' ' + str(len(x.book_list)) + '\n')
+                for book in x.book_list:
+                    file.write(str(book.id) + ' ')
+                    if book in books:
+                        print("pain")
+                    else:
+                        books.add(book)
+
+                file.write('\n')
+
+        print(sum([b.value for b in books]))
         return best_solution
 
 
-library = open("libraries/f_libraries_of_the_world.txt", "r")
+library = open("libraries/d_tough_choices.txt", "r")
 
 b, l, d = [int(x) for x in library.readline().split()]
 values = [int(x) for x in library.readline().split()]
 assert len(values) == b
-
-problem = Problem(d, l, 50)
+# print(l)
+problem = Problem(d, l, 20)
 
 for i in range(l):
     spl = library.readline().split()
