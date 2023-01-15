@@ -3,7 +3,7 @@ from copy import deepcopy
 import copy
 import time
 
-end_time = time.time() + 240 # stop after 240 seconds
+end_time = time.time() + 260  # stop after 240 seconds
 
 
 class Book:
@@ -31,13 +31,15 @@ class Library:
     def give_scanned_books(self, days_left, already_scanned):
         books = []
         scanned = 0
+        value = 0
         for b in self.book_list:
             if scanned + 1 > days_left*self.books_per_day:
-                return books
+                return books, value
             if b.id not in already_scanned:
                 books.append(b)
                 scanned += 1
-        return books
+                value += b.value
+        return books, value
 
 
 class Solution:
@@ -63,14 +65,14 @@ class Problem:
         self.libs_num = libs_num
         self.pop_size = pop_size
         self.p_mutate = 0.6
-        self.p_cross = 0.2
+        self.p_cross = 0.3
         self.t_size = 15
 
     def add_lib(self, lib):
         assert len(self.libs) < self.libs_num
         self.libs.append(lib)
 
-    def get_next(self, current_day, taken_libs):
+    def get_next(self, current_day, taken_libs, taken_books):
         best = -1
         best_time = 1000000
         out = None
@@ -81,13 +83,7 @@ class Problem:
                 break
             books_count = remaining * l.books_per_day
             books_value = 0
-            scanned_books = []
-            for b in l.book_list:
-                if len(scanned_books) >= books_count:
-                    break
-                books_value += b.value
-                scanned_books.append(b)
-
+            scanned_books, books_value = l.give_scanned_books(remaining, taken_books)
             books_value /= l.signup_time
 
             if books_value >= best and l.id not in taken_libs:
@@ -103,21 +99,38 @@ class Problem:
         current_day = 0
         sol_libs = []
         taken_libs = set()
+        taken_books = set()
 
         for _ in self.libs:
-            temp = self.get_next(current_day, taken_libs)
+            temp = None
+            if time.time() > end_time - 60:
+                for l in self.libs:
+                    if l.id not in taken_libs and l.signup_time < self.deadline - current_day:
+                        scanned_books, __ = l.give_scanned_books(self.deadline - current_day, taken_books)
+                        temp = Library(l.id, l.signup_time, l.books_per_day)
+                        temp.define_books(scanned_books)
+                        break
+            else:
+                temp = self.get_next(current_day, taken_libs, taken_books)
             if temp is None:
                 break
             current_day += temp.signup_time
             taken_libs.add(temp.id)
+            taken_books.update([book.id for book in temp.book_list])
             sol_libs.append(temp)
         sol = Solution(sol_libs)
         return sol
 
-    def random_pop(self):
+    def greedy_pop(self):
         pop = []
         pop.append(self.greedy())
         for _ in range(self.pop_size-1):
+            pop.append(self.mutate(pop[-1]))
+        return pop
+
+    def random_pop(self):
+        pop = []
+        for _ in range(self.pop_size):
             days_left = self.deadline
             libs = []
             scanned_books = set()
@@ -125,7 +138,7 @@ class Problem:
                 days_left -= l.signup_time
                 if days_left > 0:
                     sol_lib = copy.copy(l)
-                    sol_lib.book_list = l.give_scanned_books(days_left, scanned_books)
+                    sol_lib.book_list, __ = l.give_scanned_books(days_left, scanned_books)
                     scanned_books.update([book.id for book in sol_lib.book_list])
                     libs.append(sol_lib)
                 else:
@@ -135,14 +148,15 @@ class Problem:
 
     def mutate(self, solution: Solution):
         indices = [lib.id for lib in solution.list_of_libs]
-
+        taken = set([id for id in indices])
         if len(indices) < len(self.libs)/2:
-            taken = set([id for lib in indices])
             lib_idx = random.randint(0, len(self.libs)-1)
             while lib_idx in taken:
                 lib_idx = random.randint(0, len(self.libs)-1)
             idx1 = random.randint(0, len(indices)-1)
+            taken.remove(indices[idx1])
             indices[idx1] = lib_idx
+            taken.add(lib_idx)
         else:
             idx1, idx2 = random.sample(range(len(indices)), 2)
             indices[idx1], indices[idx2] = indices[idx2], indices[idx1]
@@ -151,18 +165,17 @@ class Problem:
         days_left = self.deadline
         scanned_books = set()
 
-        for lib_idx in range(len(indices)):
-            l = self.libs[indices[lib_idx]]
+        for lib_idx in indices:
+            l = self.libs[lib_idx]
             days_left -= l.signup_time
             if days_left <= 0:
                 days_left += l.signup_time
                 continue
             sol_lib = deepcopy(l)
-            sol_lib.book_list = l.give_scanned_books(days_left, scanned_books)
+            sol_lib.book_list, __ = l.give_scanned_books(days_left, scanned_books)
             scanned_books.update([book.id for book in sol_lib.book_list])
             libs.append(sol_lib)
 
-        taken = set([lib for lib in indices])
         for l in self.libs:
             if l.id not in taken:
                 if l.signup_time < days_left:
@@ -171,7 +184,8 @@ class Problem:
                         days_left += l.signup_time
                         continue
                     sol_lib = deepcopy(l)
-                    sol_lib.book_list = l.give_scanned_books(days_left, scanned_books)
+                    taken.add(l.id)
+                    sol_lib.book_list, __ = l.give_scanned_books(days_left, scanned_books)
                     scanned_books.update([book.id for book in sol_lib.book_list])
                     libs.append(sol_lib)
 
@@ -194,44 +208,33 @@ class Problem:
                 continue
             sol_lib = deepcopy(l)
             taken.add(l.id)
-            sol_lib.book_list = l.give_scanned_books(days_left, scanned_books)
+            sol_lib.book_list, __ = l.give_scanned_books(days_left, scanned_books)
             scanned_books.update([book.id for book in sol_lib.book_list])
             libs.append(sol_lib)
 
-        for idx in range(length//2, len(indices2)):
+        for idx in range(len(indices2)):
             l = self.libs[indices2[idx]]
             days_left -= l.signup_time
             if days_left <= 0:
                 days_left += l.signup_time
                 continue
-            if l in taken:
-                for help_idx in range(length//2, length):
-                    l = self.libs[indices1[help_idx]]
-                    if l.id not in taken:
-                        break
+            if l.id in taken:
+                continue
             sol_lib = deepcopy(l)
-            sol_lib.book_list = l.give_scanned_books(days_left, scanned_books)
+            sol_lib.book_list, __ = l.give_scanned_books(days_left, scanned_books)
             scanned_books.update([book.id for book in sol_lib.book_list])
             libs.append(sol_lib)
 
-        taken = set([lib.id for lib in libs])
-        for l in self.libs:
-            if l.id not in taken:
-                if l.signup_time < days_left:
-                    days_left -= l.signup_time
-                    if days_left <= 0:
-                        days_left += l.signup_time
-                        continue
-                    sol_lib = deepcopy(l)
-                    sol_lib.book_list = l.give_scanned_books(days_left, scanned_books)
-                    scanned_books.update([book.id for book in sol_lib.book_list])
-                    libs.append(sol_lib)
         return Solution(libs)
 
     @staticmethod
     def tournament(sample):
-        sample = sorted(sample, key=lambda solution: solution.fitness)
-        winner = sample[-1]
+        winner = sample[0]
+        best_fitness = sample[0].fitness
+        for solution in sample:
+            if solution.fitness > best_fitness:
+                winner = solution
+                best_fitness = solution.fitness
         return winner
 
     def step(self, population):
@@ -246,16 +249,21 @@ class Problem:
                 new_sol = self.crossover(new_sol, population[0])
 
             new_population.append(new_sol)
-        print(len(set(new_population)))
+        # print(len(set(new_population)))
         return new_population
 
     def solve(self):
-        population = self.random_pop()
+        population = []
+        if len(self.libs) > 10000:
+            population = self.random_pop()
+        else:
+            population = self.greedy_pop()
+
         no_impro = 0
         best_score = 0
         best_solution = self.tournament(population)
         while time.time() < end_time:
-            print(best_score)
+            # print(best_score)
             no_impro += 1
             population = self.step(population)
             for solution in population:
@@ -263,39 +271,28 @@ class Problem:
                     best_score = solution.fitness
                     best_solution = solution
                     no_impro = 0
-
-        print("best fitness = ", best_solution.fitness)
-        books = set()
-        with open("testxd.txt", "w") as file:
-            file.write(str(len(best_solution.list_of_libs)) + '\n')
-            for x in best_solution.list_of_libs:
-                file.write(str(x.id) + ' ' + str(len(x.book_list)) + '\n')
-                for book in x.book_list:
-                    file.write(str(book.id) + ' ')
-                    if book in books:
-                        print("pain")
-                    else:
-                        books.add(book)
-
-                file.write('\n')
-
-        print(sum([b.value for b in books]))
         return best_solution
 
-library = open("libraries/c_incunabula.txt", "r")
 
-b, l, d = [int(x) for x in library.readline().split()]
-values = [int(x) for x in library.readline().split()]
+b, l, d = [int(x) for x in input().split()]
+values = [int(x) for x in input().split()]
 assert len(values) == b
 problem = Problem(d, l, 20)
 
 for i in range(l):
-    spl = library.readline().split()
+    spl = input().split()
     new_lib = Library(i, int(spl[1]), int(spl[2]))
-    for x in library.readline().split():
+    for x in input().split():
         new_lib.add_book(Book(int(x), values[int(x)]))
     new_lib.sort_books()
     problem.add_lib(new_lib)
-library.close()
 
-test = problem.solve()
+best_solution = problem.solve()
+
+print(str(len(best_solution.list_of_libs)))
+for x in best_solution.list_of_libs:
+    print(str(x.id) + ' ' + str(len(x.book_list)))
+    for book in x.book_list:
+        print(str(book.id), end = " ")
+
+    print()

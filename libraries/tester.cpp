@@ -139,8 +139,6 @@ int main(int argc, char** argv){
             if(j < capacity){
                 final_score += book_scores[k];
                 book_scores[k] = 0;
-            }else{
-                printf("pain\n");
             }
 
             if(book_visited[k] == Y + 1){
