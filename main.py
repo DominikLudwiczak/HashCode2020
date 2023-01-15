@@ -3,7 +3,7 @@ from copy import deepcopy
 import copy
 import time
 
-end_time = time.time() + 240  # stop after 240 seconds
+end_time = time.time() + 240 # stop after 240 seconds
 
 
 class Book:
@@ -104,7 +104,7 @@ class Problem:
         sol_libs = []
         taken_libs = set()
 
-        for l in self.libs:
+        for _ in self.libs:
             temp = self.get_next(current_day, taken_libs)
             if temp is None:
                 break
@@ -116,7 +116,8 @@ class Problem:
 
     def random_pop(self):
         pop = []
-        for _ in range(self.pop_size):
+        pop.append(self.greedy())
+        for _ in range(self.pop_size-1):
             days_left = self.deadline
             libs = []
             scanned_books = set()
@@ -249,13 +250,10 @@ class Problem:
         return new_population
 
     def solve(self):
-        gr = self.greedy()
-        print(gr.fitness)
-        return gr.fitness
         population = self.random_pop()
         no_impro = 0
         best_score = 0
-        best_solution = None
+        best_solution = self.tournament(population)
         while time.time() < end_time:
             print(best_score)
             no_impro += 1
@@ -265,14 +263,6 @@ class Problem:
                     best_score = solution.fitness
                     best_solution = solution
                     no_impro = 0
-
-        for x in best_solution.list_of_libs:
-            taken = set()
-            for book in x.book_list:
-                if book.id in taken:
-                    print(':(')
-                else:
-                    taken.add(book.id)
 
         print("best fitness = ", best_solution.fitness)
         books = set()
@@ -292,8 +282,7 @@ class Problem:
         print(sum([b.value for b in books]))
         return best_solution
 
-
-library = open("libraries/f_libraries_of_the_world.txt", "r")
+library = open("libraries/c_incunabula.txt", "r")
 
 b, l, d = [int(x) for x in library.readline().split()]
 values = [int(x) for x in library.readline().split()]
