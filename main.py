@@ -22,6 +22,9 @@ class Library:
     def add_book(self, book: Book):
         self.book_list.add(book)
 
+    def define_books(self, books):
+        self.book_list = books
+
     def sort_books(self):
         self.book_list = sorted(self.book_list, key=lambda x: x.value, reverse=True)
 
@@ -44,24 +47,13 @@ class Solution:
 
     def compute_fitness(self):
         fitness = 0
+        taken_books = set()
         for lib in self.list_of_libs:
             for b in lib.book_list:
-                fitness += b.value
+                if b.id not in taken_books:
+                    fitness += b.value
+                    taken_books.add(b.id)
         return fitness
-
-    # def delete(self):
-    #     for x in self.list_of_libs:
-    #         del x
-
-
-# class Population:
-#     def __init__(self, pop_size):
-#         self.pop_size = pop_size
-#         self.solutions = set()
-#
-#     def add_solution(self, solution: Solution):
-#         assert len(self.solutions) < self.pop_size
-#         self.solutions.add(solution)
 
 
 class Problem:
@@ -78,8 +70,51 @@ class Problem:
         assert len(self.libs) < self.libs_num
         self.libs.append(lib)
 
+    def get_next(self, current_day, taken_libs):
+        best = -1
+        best_time = 1000000
+        out = None
+
+        for l in self.libs:
+            remaining = self.deadline - current_day - l.signup_time
+            if remaining <= 0:
+                break
+            books_count = remaining * l.books_per_day
+            books_value = 0
+            scanned_books = []
+            for b in l.book_list:
+                if len(scanned_books) >= books_count:
+                    break
+                books_value += b.value
+                scanned_books.append(b)
+
+            books_value /= l.signup_time
+
+            if books_value >= best and l.id not in taken_libs:
+                if books_value == best and l.signup_time >= best_time:
+                    continue
+                best = books_value
+                best_time = l.signup_time
+                out = Library(l.id, l.signup_time, l.books_per_day)
+                out.define_books(scanned_books)
+        return out
+
+    def greedy(self):
+        current_day = 0
+        sol_libs = []
+        taken_libs = set()
+
+        for l in self.libs:
+            temp = self.get_next(current_day, taken_libs)
+            if temp is None:
+                break
+            current_day += temp.signup_time
+            taken_libs.add(temp.id)
+            sol_libs.append(temp)
+        sol = Solution(sol_libs)
+        return sol
+
     def random_pop(self):
-        # pop = Population(self.pop_size)
         pop = []
         for _ in range(self.pop_size):
             days_left = self.deadline
@@ -94,7 +129,6 @@ class Problem:
                     libs.append(sol_lib)
                 else:
                     days_left += l.signup_time
-            # pop.add_solution(Solution(libs))
             pop.append(Solution(libs))
         return pop
 
@@ -111,7 +145,6 @@ class Problem:
         else:
             idx1, idx2 = random.sample(range(len(indices)), 2)
             indices[idx1], indices[idx2] = indices[idx2], indices[idx1]
-            # idx1 = min(idx1, idx2)
 
         libs = []
         days_left = self.deadline
@@ -192,8 +225,6 @@ class Problem:
                     sol_lib.book_list = l.give_scanned_books(days_left, scanned_books)
                     scanned_books.update([book.id for book in sol_lib.book_list])
                     libs.append(sol_lib)
-        # sol1.delete()
-        # del sol1
         return Solution(libs)
 
     @staticmethod
@@ -215,10 +246,12 @@ class Problem:
 
             new_population.append(new_sol)
         print(len(set(new_population)))
-        # return [self.mutate(solution) for solution in population]
         return new_population
 
     def solve(self):
+        gr = self.greedy()
+        print(gr.fitness)
+        return gr.fitness
         population = self.random_pop()
         no_impro = 0
         best_score = 0
@@ -260,12 +293,11 @@ class Problem:
         return best_solution
 
 
-library = open("libraries/d_tough_choices.txt", "r")
+library = open("libraries/f_libraries_of_the_world.txt", "r")
 
 b, l, d = [int(x) for x in library.readline().split()]
 values = [int(x) for x in library.readline().split()]
 assert len(values) == b
-# print(l)
 problem = Problem(d, l, 20)
 
 for i in range(l):
@@ -277,5 +309,4 @@ for i in range(l):
     problem.add_lib(new_lib)
 library.close()
 
-# problem.view_problem()
 test = problem.solve()
